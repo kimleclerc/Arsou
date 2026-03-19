@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARSOU — Le Jeu 8-bit</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Press Start 2P', monospace;
+    color: #fff;
+    overflow: hidden;
+  }
+
+  #game-wrapper {
+    position: relative;
+    width: 512px;
+  }
+
+  #title-screen, #game-over-screen, #win-screen {
+    position: absolute;
+    top: 0; left: 0;
+    width: 512px;
+    height: 480px;
+    background: #0a0a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 16px;
+  }
+
+  .screen-hidden { display: none !important; }
+
+  #game-canvas {
+    display: block;
+    image-rendering: pixelated;
+    border: 4px solid #ff6b35;
+    box-shadow: 0 0 30px #ff6b3566, 0 0 60px #ff6b3522;
+  }
+
+  .title-logo {
+    font-size: 36px;
+    color: #ff6b35;
+    text-shadow: 4px 4px 0 #7a2e10, 0 0 20px #ff6b3588;
+    letter-spacing: 4px;
+    animation: flicker 3s infinite;
+  }
+
+  .title-sub {
+    font-size: 8px;
+    color: #f0c040;
+    text-align: center;
+    line-height: 2;
+  }
+
+  .blink {
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  @keyframes flicker {
+    0%, 95%, 100% { opacity: 1; }
+    96% { opacity: 0.7; }
+    97% { opacity: 1; }
+    98% { opacity: 0.5; }
+    99% { opacity: 1; }
+  }
+
+  #hud {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #0a0a1a;
+    border: 4px solid #ff6b35;
+    border-top: none;
+    font-size: 9px;
+    color: #f0c040;
+    border-bottom: 4px solid #ff6b35;
+    box-shadow: 0 4px 20px #ff6b3566;
+  }
+
+  .controls-hint {
+    font-size: 7px;
+    color: #666;
+    text-align: center;
+    padding: 6px;
+    letter-spacing: 1px;
+  }
+
+  .score-big {
+    font-size: 24px;
+    color: #f0c040;
+    text-shadow: 3px 3px 0 #7a6010;
+  }
+
+  .game-over-msg {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    line-height: 2.5;
+  }
+
+  button.pixel-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    background: #ff6b35;
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    cursor: pointer;
+    box-shadow: 4px 4px 0 #7a2e10;
+    transition: transform 0.1s;
+  }
+  button.pixel-btn:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #7a2e10; }
+  button.pixel-btn:active { transform: translate(4px, 4px); box-shadow: none; }
+</style>
+</head>
+<body>
+
+<div id="game-wrapper">
+
+  <!-- TITLE SCREEN -->
+  <div id="title-screen">
+    <div class="title-logo">ARSOU</div>
+    <div class="title-sub">
+      Matane, Québec — Janvier 2001<br>
+      ─────────────────────────<br>
+      Joue PM. Saute sur les chars.<br>
+      Jonathan filme. Kim prend des notes.
+    </div>
+    <div style="font-size:8px; color:#f0c040; margin-top:8px;">↑ SAUTER &nbsp; → ← COURIR &nbsp; ESPACE COURIR</div>
+    <div class="blink" style="font-size:9px; color:#ff6b35; margin-top:16px;">APPUIE SUR ENTRÉE POUR JOUER</div>
+    <div style="font-size:7px; color:#444; margin-top:20px;">« T'as eu ça? — Jonathan hocha la tête. — On refait. »</div>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div id="game-over-screen" class="screen-hidden">
+    <div class="title-logo" style="font-size:24px; color:#ff3333;">GAME OVER</div>
+    <div class="game-over-msg">
+      T'as raté ton atterrissage, man.<br>
+      Dany dit que c'est une vieille<br>
+      blessure de soccer.
+    </div>
+    <div class="score-big" id="final-score">0</div>
+    <div style="font-size:8px; color:#888;">POINTS</div>
+    <button class="pixel-btn" onclick="restartGame()">RÉESSAYER</button>
+  </div>
+
+  <!-- WIN SCREEN -->
+  <div id="win-screen" class="screen-hidden">
+    <div class="title-logo" style="font-size:20px; color:#00ff88;">NIVEAU SUIVANT</div>
+    <div class="game-over-msg">
+      PM a regardé ses mains.<br>
+      Tout était encore là.<br>— On refait.
+    </div>
+    <div class="score-big" id="win-score">0</div>
+    <button class="pixel-btn" onclick="nextLevel()">CONTINUER</button>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <span>PM <span id="lives-display">♥♥♥</span></span>
+    <span>SCORE <span id="score-display">00000</span></span>
+    <span>NIVEAU <span id="level-display">1</span></span>
+    <span id="combo-display" style="color:#ff6b35;"></span>
+  </div>
+
+  <canvas id="game-canvas" width="512" height="480"></canvas>
+
+  <div class="controls-hint">← → COURIR &nbsp;|&nbsp; ↑ ou Z SAUTER &nbsp;|&nbsp; ESPACE SPRINT</div>
+
+</div>
+
+<script>
+// ===== PIXEL ART RENDERER (canvas 2D, pas de lib) =====
+
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// ===== PALETTE NES-STYLE =====
+const PAL = {
+  black:    '#0a0a1a',
+  darkBg:   '#1a1a2e',
+  snowBg:   '#dde8f5',
+  snowDark: '#b8cfe0',
+  snowBank: '#eaf2ff',
+  orange:   '#ff6b35',
+  orangeD:  '#cc4400',
+  yellow:   '#f0c040',
+  yellowD:  '#a07810',
+  red:      '#cc2222',
+  white:    '#ffffff',
+  lampOrange: '#ffa040',
+  lampYellow: '#ffdd80',
+  asphalt:  '#2a2a3a',
+  asphaltL: '#3a3a4e',
+  carRed:   '#cc2233',
+  carBlue:  '#2244cc',
+  carYellow:'#ddaa00',
+  carGreen: '#228844',
+  carGray:  '#667788',
+  skinTone: '#f4c68a',
+  darkGreen:'#336633',
+  teal:     '#009999',
+  purple:   '#9944cc',
+};
+
+// ===== GAME STATE =====
+let state = 'title'; // title, playing, gameover, win
+let score = 0;
+let lives = 3;
+let level = 1;
+let combo = 0;
+let comboTimer = 0;
+let frame = 0;
+
+// ===== PLAYER (PM) =====
+const PLAYER_W = 16;
+const PLAYER_H = 24;
+let player = {
+  x: 60, y: 300,
+  vx: 0, vy: 0,
+  onGround: false,
+  onBank: false,
+  onCar: false,
+  jumping: false,
+  running: false,
+  dir: 1,
+  animFrame: 0,
+  invincible: 0,
+  landed: false,
+  state: 'idle', // idle, run, jump, fall, land
+};
+
+// ===== SNOW BANKS =====
+let snowBanks = [];
+// ===== CARS =====
+let cars = [];
+let carSpawnTimer = 0;
+let carSpawnInterval = 120;
+
+// ===== PARTICLES =====
+let particles = [];
+// ===== COINS (score items = cassettes de Jonathan) =====
+let cassettes = [];
+// ===== NPCS =====
+let npcs = [];
+// ===== SIGNS / MESSAGES =====
+let floatingTexts = [];
+
+// ===== GROUND / PLATFORMS =====
+const GROUND_Y = 400;  // top of snow/asphalt
+
+// ===== CAMERA =====
+let camX = 0;
+let camTarget = 0;
+
+// ===== INPUT =====
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Enter' && state === 'title') startGame();
+  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'ArrowUp' || e.code === 'KeyZ') e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ===== HELPERS =====
+function rnd(a,b) { return a + Math.random() * (b-a); }
+function rndInt(a,b) { return Math.floor(rnd(a,b+1)); }
+function pad(n, l=5) { return String(Math.floor(n)).padStart(l,'0'); }
+
+function addParticle(x, y, vx, vy, color, life=40, size=4) {
+  particles.push({x,y,vx,vy,color,life,maxLife:life,size});
+}
+function snowBurst(x,y,n=8) {
+  for(let i=0;i<n;i++) {
+    let a = rnd(0, Math.PI*2);
+    addParticle(x, y, Math.cos(a)*rnd(1,4), Math.sin(a)*rnd(1,3)-2, PAL.white, rndInt(20,40), rndInt(2,5));
+  }
+}
+function addFloatingText(x, y, txt, color='#f0c040') {
+  floatingTexts.push({x, y, txt, color, life: 80, vy: -1.2});
+}
+
+// ===== INIT LEVEL =====
+function initLevel() {
+  // Reset
+  snowBanks = [];
+  cars = [];
+  particles = [];
+  cassettes = [];
+  floatingTexts = [];
+  carSpawnTimer = 0;
+  carSpawnInterval = Math.max(60, 140 - level * 15);
+  combo = 0;
+  comboTimer = 0;
+  camX = 0;
+
+  // Snow banks (platforms)
+  // Bank 0: starting bank (big)
+  snowBanks.push({ x: 30, y: GROUND_Y - 60, w: 110, h: 60, top: GROUND_Y - 60 });
+  // Bank 1: mid
+  snowBanks.push({ x: 300, y: GROUND_Y - 45, w: 80, h: 45, top: GROUND_Y - 45 });
+  // Bank 2: far
+  snowBanks.push({ x: 550, y: GROUND_Y - 75, w: 120, h: 75, top: GROUND_Y - 75 });
+  // Bank 3: far right
+  snowBanks.push({ x: 800, y: GROUND_Y - 50, w: 90, h: 50, top: GROUND_Y - 50 });
+
+  // Cassettes on banks
+  snowBanks.forEach((b, i) => {
+    if (i > 0) {
+      cassettes.push({ x: b.x + b.w/2 - 8, y: b.top - 20, w: 16, h: 12, collected: false, bob: rnd(0, Math.PI*2) });
+    }
+  });
+  // Some in the air over the car lane
+  for (let i = 0; i < 3 + level; i++) {
+    cassettes.push({ x: 200 + i*130, y: GROUND_Y - 90 - rnd(0,30), w:16, h:12, collected:false, bob: rnd(0,Math.PI*2) });
+  }
+
+  // NPCs
+  npcs = [];
+  // Kim (has notepad, stays on first bank)
+  npcs.push({ type:'kim', x: 90, y: GROUND_Y - 60 - 20, dir:1, anim:0 });
+  // Simon (sitting on concrete block)
+  npcs.push({ type:'simon', x: 190, y: GROUND_Y - 16, dir:1, anim:0 });
+  // Jonathan (filming, moves around)
+  npcs.push({ type:'jonathan', x: 280, y: GROUND_Y - 20, dir:1, anim:0, moveTimer: 0 });
+  // Dany (running around)
+  npcs.push({ type:'dany', x: 400, y: GROUND_Y - 20, dir:1, anim:0, vx: 1.5 });
+  // Priscilla (far right, safe)
+  npcs.push({ type:'priscilla', x: 860, y: GROUND_Y - 20, dir:-1, anim:0 });
+
+  // Player reset
+  player.x = 80;
+  player.y = snowBanks[0].top - PLAYER_H;
+  player.vx = 0;
+  player.vy = 0;
+  player.onGround = false;
+  player.onBank = false;
+  player.onCar = false;
+  player.invincible = 0;
+  player.state = 'idle';
+  player.dir = 1;
+}
+
+// ===== START GAME =====
+function startGame() {
+  score = 0; lives = 3; level = 1;
+  state = 'playing';
+  document.getElementById('title-screen').classList.add('screen-hidden');
+  document.getElementById('game-over-screen').classList.add('screen-hidden');
+  document.getElementById('win-screen').classList.add('screen-hidden');
+  initLevel();
+  updateHUD();
+}
+
+function restartGame() {
+  document.getElementById('game-over-screen').classList.add('screen-hidden');
+  startGame();
+}
+
+function nextLevel() {
+  level++;
+  document.getElementById('win-screen').classList.add('screen-hidden');
+  state = 'playing';
+  initLevel();
+  updateHUD();
+}
+
+function gameOver() {
+  state = 'gameover';
+  document.getElementById('final-score').textContent = pad(score);
+  document.getElementById('game-over-screen').classList.remove('screen-hidden');
+}
+
+function levelWin() {
+  state = 'win';
+  document.getElementById('win-score').textContent = pad(score);
+  document.getElementById('win-screen').classList.remove('screen-hidden');
+}
+
+function updateHUD() {
+  document.getElementById('score-display').textContent = pad(score);
+  document.getElementById('level-display').textContent = level;
+  document.getElementById('lives-display').textContent = '♥'.repeat(lives) + '♡'.repeat(Math.max(0,3-lives));
+  document.getElementById('combo-display').textContent = combo >= 2 ? `COMBO x${combo}!` : '';
+}
+
+// ===== SPAWN CAR =====
+const CAR_COLORS = [PAL.carRed, PAL.carBlue, PAL.carYellow, PAL.carGreen, PAL.carGray];
+const CAR_NAMES = ['Civic', 'Tercel', 'Sunfire', 'Protégé', 'Elantra'];
+function spawnCar() {
+  let speed = rnd(1.8, 2.5 + level*0.4);
+  let dir = Math.random() > 0.35 ? 1 : -1; // mostly left to right
+  let x = dir > 0 ? -120 : 620;
+  let colorIdx = rndInt(0, CAR_COLORS.length-1);
+  cars.push({
+    x, y: GROUND_Y - 28,
+    w: 80, h: 28,
+    vx: speed * dir,
+    dir,
+    color: CAR_COLORS[colorIdx],
+    name: CAR_NAMES[colorIdx],
+    hasPM: false,
+    honkTimer: rndInt(0, 200),
+  });
+}
+
+// ===== PHYSICS =====
+const GRAVITY = 0.55;
+const JUMP_VEL = -12;
+const RUN_SPD = 3.2;
+const SPRINT_SPD = 5;
+
+function updatePlayer() {
+  if (state !== 'playing') return;
+  let p = player;
+
+  // Input
+  let moveX = 0;
+  if (keys['ArrowLeft'] || keys['KeyA']) { moveX = -1; p.dir = -1; }
+  if (keys['ArrowRight'] || keys['KeyD']) { moveX = 1; p.dir = 1; }
+  let sprinting = keys['Space'] || keys['ShiftLeft'];
+  let spd = sprinting ? SPRINT_SPD : RUN_SPD;
+  p.vx = moveX * spd;
+
+  // Jump
+  if ((keys['ArrowUp'] || keys['KeyW'] || keys['KeyZ']) && (p.onGround || p.onBank || p.onCar)) {
+    p.vy = JUMP_VEL - (level * 0.2);
+    p.onGround = false;
+    p.onBank = false;
+    p.onCar = false;
+    p.jumping = true;
+    snowBurst(p.x + PLAYER_W/2, p.y + PLAYER_H, 6);
+    addFloatingText(p.x, p.y - 10, 'ARSOU!', PAL.orange);
+  }
+
+  // Gravity
+  p.vy += GRAVITY;
+  p.x += p.vx;
+  p.y += p.vy;
+
+  // State machine
+  if (!p.onGround && !p.onBank && !p.onCar) {
+    p.state = p.vy < 0 ? 'jump' : 'fall';
+  } else if (Math.abs(p.vx) > 0.1) {
+    p.state = 'run';
+  } else {
+    p.state = 'idle';
+  }
+
+  p.onGround = false;
+  p.onBank = false;
+  p.onCar = false;
+
+  // Ground collision
+  if (p.y + PLAYER_H >= GROUND_Y) {
+    p.y = GROUND_Y - PLAYER_H;
+    p.vy = 0;
+    p.onGround = true;
+    if (p.jumping) { p.jumping = false; snowBurst(p.x+8, p.y+PLAYER_H, 4); }
+  }
+
+  // Snow bank collision
+  for (let b of snowBanks) {
+    if (p.x + PLAYER_W > b.x && p.x < b.x + b.w) {
+      if (p.y + PLAYER_H >= b.top && p.y + PLAYER_H <= b.top + 20 && p.vy >= 0) {
+        p.y = b.top - PLAYER_H;
+        p.vy = 0;
+        p.onBank = true;
+        if (p.jumping) { p.jumping = false; snowBurst(p.x+8, p.y+PLAYER_H, 6); }
+      }
+    }
+  }
+
+  // Car top collision (PM lands on car = SCORE!)
+  for (let c of cars) {
+    let carTop = c.y;
+    if (p.x + PLAYER_W > c.x && p.x < c.x + c.w) {
+      if (p.y + PLAYER_H >= carTop && p.y + PLAYER_H <= carTop + 18 && p.vy >= 0 && !c.hasPM) {
+        p.y = carTop - PLAYER_H;
+        p.vy = 0;
+        p.vx = c.vx; // ride the car!
+        p.onCar = true;
+        c.hasPM = true;
+        if (p.jumping) {
+          p.jumping = false;
+          // SCORE!
+          combo++;
+          comboTimer = 120;
+          let pts = 100 * combo * level;
+          score += pts;
+          snowBurst(p.x+8, p.y+PLAYER_H, 12);
+          addFloatingText(p.x, p.y - 15, combo >= 3 ? `COMBO x${combo}!! +${pts}` : `+${pts}`, combo>=3? PAL.orange : PAL.yellow);
+          updateHUD();
+        }
+      }
+    }
+    // If on car, update position with car
+    if (c.hasPM && p.onCar) {
+      // already set vx = c.vx above on landing; just let physics run
+    }
+  }
+
+  // Fall into void or off screen bottom = lose life
+  if (p.y > 500) {
+    loseLife();
+    return;
+  }
+
+  // Left/right bounds
+  p.x = Math.max(camX, Math.min(camX + 512 - PLAYER_W, p.x));
+
+  // Camera follows player (loose)
+  let targetCamX = p.x - 160;
+  targetCamX = Math.max(0, Math.min(500, targetCamX));
+  camX += (targetCamX - camX) * 0.08;
+
+  // Invincibility
+  if (p.invincible > 0) p.invincible--;
+
+  // Anim
+  p.animFrame = Math.floor(frame / 8) % 4;
+
+  // Combo decay
+  if (comboTimer > 0) {
+    comboTimer--;
+    if (comboTimer === 0) { combo = 0; updateHUD(); }
+  }
+}
+
+function loseLife() {
+  lives--;
+  combo = 0;
+  updateHUD();
+  snowBurst(player.x+8, player.y, 14);
+  addFloatingText(player.x-20, player.y-20, 'OUCH!', PAL.red);
+  if (lives <= 0) {
+    setTimeout(gameOver, 800);
+    state = 'dying';
+  } else {
+    // Respawn
+    player.x = 80; player.y = snowBanks[0].top - PLAYER_H;
+    player.vx = 0; player.vy = 0;
+    player.onGround = false;
+    player.invincible = 120;
+    player.state = 'idle';
+  }
+}
+
+function updateCars() {
+  // Spawn
+  carSpawnTimer++;
+  if (carSpawnTimer >= carSpawnInterval) {
+    spawnCar();
+    carSpawnTimer = 0;
+    carSpawnInterval = Math.max(50, 140 - level*15 + rndInt(-15,15));
+  }
+
+  for (let i = cars.length-1; i >= 0; i--) {
+    let c = cars[i];
+    c.x += c.vx;
+    c.hasPM = false; // reset each frame; will be set if PM still on top
+
+    // Remove off-screen
+    if (c.x > 650 || c.x < -130) {
+      cars.splice(i, 1);
+      continue;
+    }
+
+    // Car collision with player (side = die)
+    let p = player;
+    if (p.invincible === 0 && !p.onCar) {
+      if (p.x + PLAYER_W > c.x + 4 && p.x < c.x + c.w - 4 &&
+          p.y + PLAYER_H > c.y + 6 && p.y < c.y + c.h) {
+        loseLife();
+      }
+    }
+  }
+}
+
+function updateCassettes() {
+  for (let cs of cassettes) {
+    if (cs.collected) continue;
+    cs.bob += 0.08;
+    let drawY = cs.y + Math.sin(cs.bob) * 4;
+    let p = player;
+    if (p.x + PLAYER_W > cs.x && p.x < cs.x + cs.w &&
+        p.y + PLAYER_H > drawY && p.y < drawY + cs.h) {
+      cs.collected = true;
+      let pts = 50 * level;
+      score += pts;
+      addFloatingText(cs.x, cs.y-10, `CASSETTE +${pts}`, PAL.teal);
+      snowBurst(cs.x+8, drawY+6, 5);
+      updateHUD();
+    }
+  }
+}
+
+function updateNPCs() {
+  for (let n of npcs) {
+    n.anim = Math.floor(frame/12) % 2;
+    if (n.type === 'dany') {
+      n.x += n.vx;
+      if (n.x < 350 || n.x > 480) n.vx *= -1;
+      n.dir = n.vx > 0 ? 1 : -1;
+    }
+    if (n.type === 'jonathan') {
+      n.moveTimer++;
+      if (n.moveTimer > 60) {
+        n.moveTimer = 0;
+        n.dir = Math.random() > 0.5 ? 1 : -1;
+        n.x += n.dir * rnd(10,30);
+        n.x = Math.max(230, Math.min(330, n.x));
+      }
+    }
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length-1; i >= 0; i--) {
+    let p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.15;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function updateFloatingTexts() {
+  for (let i = floatingTexts.length-1; i >= 0; i--) {
+    let t = floatingTexts[i];
+    t.y += t.vy;
+    t.life--;
+    if (t.life <= 0) floatingTexts.splice(i, 1);
+  }
+}
+
+// Check win condition
+function checkWin() {
+  let allCollected = cassettes.every(c => c.collected);
+  if (allCollected && score > 0) {
+    if (level >= 3) {
+      // Final win — show congrats
+      levelWin();
+    } else {
+      levelWin();
+    }
+  }
+}
+
+// ===== DRAW FUNCTIONS =====
+
+function drawBackground() {
+  // Night sky
+  ctx.fillStyle = PAL.black;
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Stars
+  ctx.fillStyle = '#ffffff';
+  let starSeed = 42;
+  for (let i = 0; i < 60; i++) {
+    starSeed = (starSeed * 1664525 + 1013904223) & 0xffffffff;
+    let sx = ((starSeed >>> 0) % 512);
+    starSeed = (starSeed * 1664525 + 1013904223) & 0xffffffff;
+    let sy = ((starSeed >>> 0) % 160);
+    let bri = (frame + i*13) % 60 < 3 ? 2 : 1;
+    ctx.fillRect(sx, sy, bri, bri);
+  }
+
+  // Buildings / Centre d'achat silhouette
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 200, 180, 200);
+  ctx.fillRect(200, 220, 120, 180);
+  ctx.fillRect(350, 180, 200, 220);
+
+  // Building windows (orange glow)
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 5; j++) {
+      let wx = 10 + i*20;
+      let wy = 210 + j*20;
+      if (wx < 175 && wy < 395) {
+        let lit = ((i * 7 + j * 13 + Math.floor(frame/80)) % 5) !== 0;
+        ctx.fillStyle = lit ? '#ffa04044' : '#00000000';
+        if (lit) ctx.fillRect(wx, wy, 10, 8);
+      }
+    }
+  }
+
+  // Street lamp poles
+  for (let lx = 80; lx < 520; lx += 140) {
+    let lox = lx - camX * 0.3; // parallax
+    ctx.fillStyle = '#555566';
+    ctx.fillRect(lox - 2, GROUND_Y - 80, 4, 80);
+    ctx.fillStyle = '#444455';
+    ctx.fillRect(lox - 12, GROUND_Y - 85, 24, 8);
+    // Lamp glow
+    let alpha = 0.18 + Math.sin(frame*0.05 + lx)*0.04;
+    ctx.fillStyle = PAL.lampOrange;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(lox, GROUND_Y - 82, 28, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = PAL.lampYellow;
+    ctx.fillRect(lox - 6, GROUND_Y - 89, 12, 6);
+  }
+
+  // Asphalt (parking lot)
+  ctx.fillStyle = PAL.asphalt;
+  ctx.fillRect(-camX, GROUND_Y, 1024, 100);
+
+  // Parking lines
+  ctx.fillStyle = PAL.asphaltL;
+  for (let lx = 50; lx < 900; lx += 60) {
+    ctx.fillRect(lx - camX, GROUND_Y + 10, 3, 30);
+  }
+
+  // Snow ground layer
+  ctx.fillStyle = PAL.snowBg;
+  ctx.fillRect(-camX, GROUND_Y - 8, 1024, 12);
+  // snow texture bumps
+  for (let sx = 0; sx < 900; sx += 18) {
+    ctx.fillStyle = PAL.snowDark;
+    ctx.fillRect(sx - camX, GROUND_Y - 6, 10, 4);
+  }
+}
+
+function drawSnowBanks() {
+  for (let b of snowBanks) {
+    let bx = b.x - camX;
+    // Main snow body
+    ctx.fillStyle = PAL.snowBank;
+    ctx.fillRect(bx, b.top, b.w, b.h);
+    // Shadow side
+    ctx.fillStyle = PAL.snowDark;
+    ctx.fillRect(bx, b.top, 6, b.h);
+    ctx.fillRect(bx + b.w - 6, b.top, 6, b.h);
+    // Top highlight
+    ctx.fillStyle = PAL.white;
+    ctx.fillRect(bx + 6, b.top, b.w - 12, 5);
+    // Sparkles
+    ctx.fillStyle = PAL.lampYellow;
+    for (let i = 0; i < 3; i++) {
+      let sx = bx + 15 + i*30;
+      let sy = b.top + 2;
+      if ((frame + i*20) % 40 < 5) ctx.fillRect(sx, sy, 2, 2);
+    }
+  }
+}
+
+function drawCars() {
+  for (let c of cars) {
+    let cx = c.x - camX;
+    let cy = c.y;
+    // Body
+    ctx.fillStyle = c.color;
+    ctx.fillRect(cx, cy, c.w, c.h);
+    // Roof
+    ctx.fillStyle = c.color;
+    ctx.fillRect(cx + 12, cy - 14, c.w - 24, 16);
+    // Windows
+    ctx.fillStyle = '#aaddff88';
+    ctx.fillRect(cx + 15, cy - 12, 16, 10);
+    ctx.fillRect(cx + 35, cy - 12, 18, 10);
+    // Wheels
+    ctx.fillStyle = '#111';
+    ctx.fillRect(cx + 8, cy + 20, 16, 10);
+    ctx.fillRect(cx + c.w - 24, cy + 20, 16, 10);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(cx + 12, cy + 22, 8, 6);
+    ctx.fillRect(cx + c.w - 20, cy + 22, 8, 6);
+    // Headlights / taillights
+    if (c.dir > 0) {
+      ctx.fillStyle = PAL.lampYellow;
+      ctx.fillRect(cx + c.w - 6, cy + 4, 6, 8);
+      ctx.fillStyle = PAL.red;
+      ctx.fillRect(cx, cy + 4, 6, 8);
+    } else {
+      ctx.fillStyle = PAL.lampYellow;
+      ctx.fillRect(cx, cy + 4, 6, 8);
+      ctx.fillStyle = PAL.red;
+      ctx.fillRect(cx + c.w - 6, cy + 4, 6, 8);
+    }
+    // Car name plate
+    ctx.fillStyle = PAL.white;
+    ctx.font = '4px "Press Start 2P", monospace';
+    ctx.fillText(c.name.substring(0,6), cx + 8, cy + 18);
+  }
+}
+
+function drawPlayer() {
+  let p = player;
+  let px = p.x - camX;
+  let py = p.y;
+  let blink = p.invincible > 0 && Math.floor(frame/4)%2===0;
+  if (blink) return;
+
+  ctx.save();
+  if (p.dir < 0) {
+    ctx.translate(px + PLAYER_W, 0);
+    ctx.scale(-1, 1);
+    px = 0;
+  } else {
+    ctx.translate(0, 0);
+  }
+
+  // Jacket (orange — PM's color)
+  ctx.fillStyle = PAL.orange;
+  ctx.fillRect(px + 2, py + 8, 12, 12);
+  // Pants
+  ctx.fillStyle = '#334466';
+  ctx.fillRect(px + 3, py + 18, 5, 6);
+  ctx.fillRect(px + 8, py + 18, 5, 6);
+  // Boots
+  ctx.fillStyle = '#222';
+  ctx.fillRect(px + 2, py + 22, 5, 4);
+  ctx.fillRect(px + 8, py + 22, 5, 4);
+  // Head
+  ctx.fillStyle = PAL.skinTone;
+  ctx.fillRect(px + 3, py, 10, 10);
+  // Toque (winter hat)
+  ctx.fillStyle = PAL.orange;
+  ctx.fillRect(px + 2, py - 2, 12, 5);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(px + 2, py - 4, 12, 3);
+  // Pompom
+  ctx.fillStyle = PAL.white;
+  ctx.fillRect(px + 5, py - 7, 6, 4);
+  // Eyes
+  ctx.fillStyle = '#000';
+  ctx.fillRect(px + 5, py + 3, 2, 2);
+  ctx.fillRect(px + 9, py + 3, 2, 2);
+  // Arm animated
+  let armY = p.state === 'run' ? py + 10 + (p.animFrame%2)*2 : py + 10;
+  ctx.fillStyle = PAL.orange;
+  ctx.fillRect(px + 0, armY, 3, 8);
+  ctx.fillRect(px + 13, armY, 3, 8);
+
+  // Running leg animation
+  if (p.state === 'run') {
+    let legOff = p.animFrame < 2 ? 2 : 0;
+    ctx.fillStyle = '#334466';
+    ctx.fillRect(px + 3, py + 18, 5, 6 - legOff);
+    ctx.fillRect(px + 8, py + 18, 5, 6 + legOff - 2);
+  }
+
+  ctx.restore();
+}
+
+// Draw NPC pixel art
+const NPC_COLORS = {
+  kim:       { body:'#336699', head: PAL.skinTone, hat:'#223355' },
+  simon:     { body:'#669933', head: PAL.skinTone, hat:'#445522' },
+  jonathan:  { body:'#993366', head: PAL.skinTone, hat:'#662244' },
+  dany:      { body:'#cc8800', head: PAL.skinTone, hat:'#885500' },
+  priscilla: { body:'#9944cc', head: PAL.skinTone, hat:'#662299' },
+};
+
+function drawNPCs() {
+  for (let n of npcs) {
+    let nx = n.x - camX;
+    let ny = n.y;
+    let c = NPC_COLORS[n.type];
+    let legOff = n.anim === 0 ? 0 : 2;
+
+    ctx.save();
+    if (n.dir < 0) { ctx.translate(nx + 14, 0); ctx.scale(-1,1); nx=0; }
+
+    // Body
+    ctx.fillStyle = c.body;
+    ctx.fillRect(nx+2, ny+8, 10, 10);
+    // Legs
+    ctx.fillStyle = '#334466';
+    ctx.fillRect(nx+2, ny+17, 4, 4+legOff);
+    ctx.fillRect(nx+7, ny+17, 4, 4);
+    // Head
+    ctx.fillStyle = c.head;
+    ctx.fillRect(nx+3, ny+0, 8, 9);
+    // Hat
+    ctx.fillStyle = c.hat;
+    ctx.fillRect(nx+2, ny-3, 10, 4);
+    // Eyes
+    ctx.fillStyle='#000';
+    ctx.fillRect(nx+5, ny+3, 2, 2);
+    ctx.fillRect(nx+9, ny+3, 1, 2);
+
+    // Special props
+    if (n.type === 'kim') {
+      // Notepad
+      ctx.fillStyle = PAL.white;
+      ctx.fillRect(nx+12, ny+10, 6, 8);
+      ctx.fillStyle = '#6699cc';
+      ctx.fillRect(nx+13, ny+11, 4, 1);
+      ctx.fillRect(nx+13, ny+13, 4, 1);
+      ctx.fillRect(nx+13, ny+15, 4, 1);
+    }
+    if (n.type === 'jonathan') {
+      // Camera
+      ctx.fillStyle = '#222';
+      ctx.fillRect(nx+12, ny+8, 10, 7);
+      ctx.fillStyle = '#66aaff';
+      ctx.fillRect(nx+13, ny+9, 5, 5);
+      ctx.fillStyle = PAL.red;
+      let recBlink = Math.floor(frame/15)%2===0;
+      if (recBlink) ctx.fillRect(nx+19, ny+9, 2, 2);
+    }
+
+    ctx.restore();
+
+    // NPC label
+    ctx.fillStyle = '#ffffff88';
+    ctx.font = '5px "Press Start 2P", monospace';
+    ctx.fillText(n.type.toUpperCase(), n.x - camX, n.y - 6);
+  }
+}
+
+function drawCassettes() {
+  for (let cs of cassettes) {
+    if (cs.collected) continue;
+    let drawY = cs.y + Math.sin(cs.bob) * 4;
+    let cx = cs.x - camX;
+    // Cassette body
+    ctx.fillStyle = PAL.teal;
+    ctx.fillRect(cx, drawY, 16, 11);
+    // Cassette holes
+    ctx.fillStyle = '#000';
+    ctx.fillRect(cx+3, drawY+2, 4, 4);
+    ctx.fillRect(cx+9, drawY+2, 4, 4);
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(cx+4, drawY+3, 2, 2);
+    ctx.fillRect(cx+10, drawY+3, 2, 2);
+    // Label
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(cx+1, drawY+7, 14, 3);
+    // Shimmer
+    if (Math.floor(frame/10)%2===0) {
+      ctx.fillStyle = '#ffffff88';
+      ctx.fillRect(cx, drawY, 3, 11);
+    }
+  }
+}
+
+function drawParticles() {
+  for (let p of particles) {
+    let alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - camX, p.y, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFloatingTexts() {
+  for (let t of floatingTexts) {
+    let alpha = t.life / 80;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = t.color;
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillText(t.txt, t.x - camX, t.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  // Temperature display
+  ctx.fillStyle = '#6699cc';
+  ctx.font = '6px "Press Start 2P", monospace';
+  ctx.fillText(`-20°C`, 460, 20);
+
+  // Combo indicator
+  if (combo >= 2) {
+    ctx.fillStyle = PAL.orange;
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText(`COMBO x${combo}`, 180, 25);
+  }
+
+  // Cassettes left
+  let remaining = cassettes.filter(c=>!c.collected).length;
+  ctx.fillStyle = PAL.teal;
+  ctx.font = '6px "Press Start 2P", monospace';
+  ctx.fillText(`CASSETTES: ${remaining}`, 5, 20);
+}
+
+// ===== MAIN LOOP =====
+function gameLoop() {
+  frame++;
+  ctx.clearRect(0, 0, 512, 512);
+
+  if (state === 'playing' || state === 'dying') {
+    updatePlayer();
+    updateCars();
+    updateCassettes();
+    updateNPCs();
+    updateParticles();
+    updateFloatingTexts();
+    if (state === 'playing') checkWin();
+  }
+
+  drawBackground();
+  drawSnowBanks();
+  drawCars();
+  drawCassettes();
+  drawNPCs();
+  drawPlayer();
+  drawParticles();
+  drawFloatingTexts();
+  drawHUD();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ===== BOOT =====
+gameLoop();
+</script>
+</body>
+</html>
